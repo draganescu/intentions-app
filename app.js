@@ -7,7 +7,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-import { saveMessage, getMessages, getMessagesWithTags, getAllTags, searchMessages, saveFilter, getAllFilters, deleteFilter } from './db.js';
+import { saveMessage, getMessages, getMessagesWithTags, getAllTags, searchMessages, saveFilter, getAllFilters, deleteFilter, deleteMessage } from './db.js';
 
 // Visual viewport handling for iOS
 const viewport = window.visualViewport;
@@ -39,6 +39,9 @@ let currentPage = 0;
 let activeTagFilter = [];
 let searchTimeout = null;
 let isSearchMode = false;
+let wasPasted = false;
+let splitPasteEnabled = localStorage.getItem('splitPasteEnabled') !== 'false'; // Default to true
+let showMessageNumbers = false;
 
 // Tag sidebar functionality
 const tagSidebar = document.querySelector('.tag-sidebar');
@@ -54,6 +57,24 @@ toggleTagsBtn.addEventListener('click', () => {
 closeTagsBtn.addEventListener('click', () => {
     tagSidebar.classList.remove('open');
 });
+
+// Initialize split paste toggle
+const splitPasteToggle = document.getElementById('splitPasteToggle');
+splitPasteToggle.checked = splitPasteEnabled;
+splitPasteToggle.addEventListener('sl-change', (e) => {
+    splitPasteEnabled = e.target.checked;
+    localStorage.setItem('splitPasteEnabled', splitPasteEnabled);
+});
+
+// Add paste styles
+const pasteStyle = document.createElement('style');
+pasteStyle.textContent = `
+    .message-input.pasted::part(textarea) {
+        background-color: rgba(255, 253, 205, 0.3) !important;
+        transition: background-color 0.3s ease;
+    }
+`;
+document.head.appendChild(pasteStyle);
 
 // Update tag list
 async function updateTagList() {
@@ -184,7 +205,7 @@ async function loadMessages() {
         
         // Add messages in chronological order (oldest first)
         messages.reverse().forEach(msg => {
-            addMessage(msg.text, msg.type, true);
+            addMessage(msg, msg.type, true);
         });
     } catch (error) {
         console.error('Failed to load messages:', error);
@@ -204,11 +225,184 @@ function formatMessageText(text) {
 async function addMessage(text, type, skipStorage = false) {
     const message = document.createElement('div');
     message.classList.add('message', type);
-    message.innerHTML = formatMessageText(text);
+    
+    // Create message content container
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'message-content';
+    // Handle both string messages and message objects
+    const messageText = typeof text === 'object' ? text.text : text;
+    contentContainer.innerHTML = formatMessageText(messageText);
+    
+    // Add number pill
+    const numberPill = document.createElement('div');
+    numberPill.className = 'number-pill';
+    
+    // Add action menu
+    const actionMenu = document.createElement('div');
+    actionMenu.className = 'action-menu';
+    actionMenu.innerHTML = `
+        <sl-button size="small" variant="default">Done</sl-button>
+        <sl-button size="small" variant="default">Details</sl-button>
+        <sl-button size="small" variant="default">Delete</sl-button>
+    `;
+    
+    // Add elements to message
+    message.appendChild(numberPill);
+    message.appendChild(actionMenu);
+    message.appendChild(contentContainer);
+    
+    // Store the message timestamp for deletion
+    let messageTimestamp;
+    
+    if (!skipStorage) {
+        try {
+            const savedMessage = await saveMessage(messageText, type);
+            messageTimestamp = savedMessage.timestamp;
+        } catch (error) {
+            console.error('Failed to save message:', error);
+        }
+    } else {
+        // For loaded messages, use their existing timestamp
+        messageTimestamp = typeof text === 'object' ? text.timestamp : Date.now();
+    }
+    
+    // Store the timestamp in a data attribute
+    message.dataset.timestamp = messageTimestamp;
+    
+    // Add long press handling
+    let pressTimer = null;
+    const longPressDelay = 500; // 500ms for long press
+    let isLongPress = false;
+    
+    const startPress = (e) => {
+        if (e.type === 'mousedown' && e.button !== 0) return; // Only handle left mouse button
+        isLongPress = false;
+        pressTimer = setTimeout(() => {
+            isLongPress = true;
+            // Find message number
+            const messages = Array.from(messagesContainer.querySelectorAll('.message'));
+            const messageIndex = messages.indexOf(message);
+            const messageNumber = messages.length - messageIndex;
+            
+            // Update textarea with colon command
+            textarea.value = `:${messageNumber}`;
+            
+            // Trigger input event to show numbers and highlight
+            const inputEvent = new Event('input');
+            textarea.dispatchEvent(inputEvent);
+            
+            // Show visual feedback
+            message.classList.add('highlighted');
+            
+            // Focus textarea
+            textarea.focus();
+        }, longPressDelay);
+        
+        // Prevent text selection during long press
+        e.preventDefault();
+    };
+    
+    const endPress = (e) => {
+        clearTimeout(pressTimer);
+        // Prevent click event if this was a long press
+        if (isLongPress) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+    
+    const cancelPress = () => {
+        clearTimeout(pressTimer);
+    };
+    
+    // Add mouse event listeners
+    message.addEventListener('mousedown', startPress);
+    message.addEventListener('mouseup', endPress);
+    message.addEventListener('mouseleave', cancelPress);
+    
+    // Add touch event listeners
+    message.addEventListener('touchstart', startPress, { passive: false });
+    message.addEventListener('touchend', endPress);
+    message.addEventListener('touchcancel', cancelPress);
+    
+    // Add click handlers for action menu buttons
+    const [doneBtn, detailsBtn, deleteBtn] = actionMenu.querySelectorAll('sl-button');
+    
+    doneBtn.addEventListener('click', () => {
+        message.classList.remove('highlighted');
+        // Add your done action here
+    });
+    
+    detailsBtn.addEventListener('click', () => {
+        // Add your details action here
+    });
+    
+    // Handle delete button with confirmation
+    let deleteConfirmed = false;
+    
+    // Reset confirmation state when focus is lost
+    const resetDeleteState = () => {
+        deleteConfirmed = false;
+        deleteBtn.classList.remove('delete-confirm');
+        deleteBtn.textContent = 'Delete';
+    };
+    
+    deleteBtn.addEventListener('click', async () => {
+        if (!deleteConfirmed) {
+            deleteConfirmed = true;
+            deleteBtn.classList.add('delete-confirm');
+            deleteBtn.textContent = 'Sure?';
+            
+            // Reset state when focus is lost
+            const handleFocusOut = (event) => {
+                // Check if the new focus target is outside the action menu
+                if (!actionMenu.contains(event.relatedTarget)) {
+                    resetDeleteState();
+                    document.removeEventListener('focusout', handleFocusOut);
+                }
+            };
+            
+            document.addEventListener('focusout', handleFocusOut);
+            
+            // Also reset if user clicks elsewhere
+            const handleClickOutside = (event) => {
+                if (!actionMenu.contains(event.target)) {
+                    resetDeleteState();
+                    document.removeEventListener('click', handleClickOutside);
+                }
+            };
+            
+            document.addEventListener('click', handleClickOutside);
+            
+        } else {
+            try {
+                const timestamp = parseInt(message.dataset.timestamp, 10);
+                if (!isNaN(timestamp)) {
+                    await deleteMessage(timestamp);
+                }
+                message.remove();
+                // Refresh the message numbers if they're showing
+                if (showMessageNumbers) {
+                    updateMessageNumbers(true);
+                }
+                // Refresh the tag list since we might have removed tags
+                await updateTagList();
+            } catch (error) {
+                console.error('Failed to delete message:', error);
+            }
+            resetDeleteState();
+        }
+    });
 
     // Add click handlers for tags
-    message.querySelectorAll('.tag').forEach(tagElement => {
-        tagElement.addEventListener('click', () => {
+    contentContainer.querySelectorAll('.tag').forEach(tagElement => {
+        tagElement.addEventListener('click', (e) => {
+            // Don't trigger tag click if this was a long press
+            if (isLongPress) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             const tag = tagElement.dataset.tag;
             if (!activeTagFilter.includes(tag)) {
                 activeTagFilter.push(tag);
@@ -222,14 +416,6 @@ async function addMessage(text, type, skipStorage = false) {
         // New messages always go at the bottom
         messagesContainer.appendChild(message);
         scrollToBottom();
-
-        try {
-            await saveMessage(text, type);
-            await loadMessages();
-            await updateTagList();
-        } catch (error) {
-            console.error('Failed to save message:', error);
-        }
     } else {
         // For loaded messages, append at the bottom instead of inserting at top
         messagesContainer.appendChild(message);
@@ -239,6 +425,11 @@ async function addMessage(text, type, skipStorage = false) {
 
 // Scroll to bottom of messages
 function scrollToBottom() {
+    // Skip scrolling if we're in colon mode
+    if (textarea.value.startsWith(':')) {
+        return;
+    }
+    
     // Ensure the scroll happens after the DOM is fully updated
     requestAnimationFrame(() => {
         const lastMessage = messagesContainer.lastElementChild;
@@ -255,15 +446,57 @@ function clearMessages() {
     }
 }
 
+// Add paste event handler
+textarea.addEventListener('paste', () => {
+    wasPasted = true;
+    textarea.classList.add('pasted');
+});
+
+// Reset paste state
+function resetPasteState() {
+    wasPasted = false;
+    textarea.classList.remove('pasted');
+}
+
 // Handle textarea keyboard events
-textarea.addEventListener('keydown', (e) => {
+textarea.addEventListener('keydown', async (e) => {
     // Send message on Enter (but not with Shift key)
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         const message = textarea.value.trim();
         if (message) {
-            addMessage(message, 'sent');
-            textarea.value = '';
+            if (splitPasteEnabled && wasPasted && (message.includes('\n') || message.includes('\r'))) {
+                // Split pasted text into multiple messages, limit to 200
+                const messages = message.split(/\r?\n/)
+                    .filter(msg => msg.trim())
+                    .slice(0, 200);
+                
+                if (messages.length > 200) {
+                    // Show notification about limit
+                    const notification = document.createElement('div');
+                    notification.className = 'message-info';
+                    notification.textContent = 'Message limit reached (200 messages maximum)';
+                    messagesContainer.appendChild(notification);
+                }
+                
+                // Process all messages first
+                for (const msg of messages) {
+                    await addMessage(msg.trim(), 'sent');
+                }
+                
+                // Then refresh the view once at the end
+                await loadMessages();
+                await updateTagList();
+                
+                textarea.value = '';
+            } else {
+                await addMessage(message, 'sent');
+                await loadMessages();
+                await updateTagList();
+                textarea.value = '';
+            }
+            
+            resetPasteState();
             
             // Auto resize textarea
             const event = new Event('sl-input');
@@ -304,7 +537,7 @@ async function performSearch(query) {
     }
 }
 
-// Handle textarea input for search
+// Handle textarea input for search and commands
 textarea.addEventListener('input', (e) => {
     const text = e.target.value;
     
@@ -312,6 +545,38 @@ textarea.addEventListener('input', (e) => {
     if (searchTimeout) {
         clearTimeout(searchTimeout);
     }
+    
+    if (text.startsWith(':')) {
+        const match = text.match(/^:(\d+)/);
+        if (match) {
+            const targetNumber = parseInt(match[1], 10);
+            // Remove highlight from all messages
+            messagesContainer.querySelectorAll('.message').forEach(msg => {
+                msg.classList.remove('highlighted');
+            });
+            // Find and highlight the message with matching number
+            const messages = Array.from(messagesContainer.querySelectorAll('.message'));
+            messages.forEach((message, index) => {
+                const messageNumber = messages.length - index;
+                if (messageNumber === targetNumber) {
+                    message.classList.add('highlighted');
+                    message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        } else {
+            // Show numbers without highlighting if no specific number
+            updateMessageNumbers(true);
+        }
+    } else {
+        // Remove all highlights and numbers when not using colon
+        messagesContainer.querySelectorAll('.message').forEach(msg => {
+            msg.classList.remove('highlighted');
+        });
+        updateMessageNumbers(false);
+    }
+    
+    // Toggle message numbers when text starts with colon
+    updateMessageNumbers(text.startsWith(':'));
     
     if (text.startsWith('@')) {
         const command = text.trim();
@@ -377,14 +642,42 @@ textarea.addEventListener('input', (e) => {
     }
 });
 
+// Update message numbers
+function updateMessageNumbers(show = false) {
+    showMessageNumbers = show;
+    messagesContainer.classList.toggle('show-numbers', show);
+    
+    if (show) {
+        const messages = Array.from(messagesContainer.querySelectorAll('.message'));
+        messages.forEach((message, index) => {
+            const numberPill = message.querySelector('.number-pill');
+            if (numberPill) {
+                numberPill.textContent = messages.length - index;
+                message.classList.add('has-number');
+            }
+        });
+    } else {
+        messagesContainer.querySelectorAll('.message').forEach(message => {
+            const numberPill = message.querySelector('.number-pill');
+            if (numberPill) {
+                numberPill.textContent = '';
+                message.classList.remove('has-number');
+            }
+        });
+    }
+}
+
 // Update message form submission
 messageForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const message = textarea.value.trim();
     
     if (message) {
-        if (message.startsWith('@')) {
-            if (message === '@help') {
+        // Remove the colon prefix if present
+        const actualMessage = message.startsWith(':') ? message.slice(1).trim() : message;
+        
+        if (actualMessage.startsWith('@')) {
+            if (actualMessage === '@help') {
                 helpModal.show();
             }
             // Clear input for all @ commands
@@ -395,9 +688,9 @@ messageForm.addEventListener('submit', async (e) => {
             return;
         }
         
-        if (message.startsWith('/')) {
+        if (actualMessage.startsWith('/')) {
             // Save search filter
-            const query = message.slice(1).trim();
+            const query = actualMessage.slice(1).trim();
             if (query) {
                 try {
                     await saveFilter({
@@ -410,9 +703,9 @@ messageForm.addEventListener('submit', async (e) => {
                 }
             }
             return;
-        } else if (message.startsWith('#')) {
+        } else if (actualMessage.startsWith('#')) {
             // Save tag combination filter
-            const tags = message.trim()
+            const tags = actualMessage.trim()
                 .split(/\s+/)
                 .filter(word => word.startsWith('#'))
                 .map(tag => tag.toLowerCase());
@@ -431,9 +724,38 @@ messageForm.addEventListener('submit', async (e) => {
             return;
         }
         
-        addMessage(message, 'sent');
+        if (splitPasteEnabled && wasPasted && (actualMessage.includes('\n') || actualMessage.includes('\r'))) {
+            // Split pasted text into multiple messages, limit to 200
+            const messages = actualMessage.split(/\r?\n/)
+                .filter(msg => msg.trim())
+                .slice(0, 200);
+            
+            if (messages.length > 200) {
+                // Show notification about limit
+                const notification = document.createElement('div');
+                notification.className = 'message-info';
+                notification.textContent = 'Message limit reached (200 messages maximum)';
+                messagesContainer.appendChild(notification);
+            }
+            
+            // Process all messages first
+            for (const msg of messages) {
+                await addMessage(msg.trim(), 'sent');
+            }
+            
+            // Then refresh the view once at the end
+            await loadMessages();
+            await updateTagList();
+            
+        } else {
+            await addMessage(actualMessage, 'sent');
+            await loadMessages();
+            await updateTagList();
+        }
+        
         textarea.value = '';
         isSearchMode = false;
+        resetPasteState();
         
         // Auto resize textarea
         const event = new Event('sl-input');
@@ -462,4 +784,21 @@ document.head.appendChild(style);
 window.addEventListener('load', () => {
     loadMessages();
     updateTagList();
+});
+
+// Handle escape key globally
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.activeElement !== textarea) {
+        textarea.value = '';
+        // Reset all states
+        isSearchMode = false;
+        resetPasteState();
+        updateMessageNumbers(false);
+        messagesContainer.querySelectorAll('.message').forEach(msg => {
+            msg.classList.remove('highlighted');
+        });
+        // Auto resize textarea
+        const event = new Event('sl-input');
+        textarea.dispatchEvent(event);
+    }
 }); 

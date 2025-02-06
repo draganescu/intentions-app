@@ -1,7 +1,7 @@
 {
-    "name": "Natural Chat",
-    "short_name": "Chat",
-    "description": "A natural-toned chat application",
+    "name": "Intentions",
+    "short_name": "Intentions",
+    "description": "A mindful note-taking app with tags and search",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#F5F2EB",

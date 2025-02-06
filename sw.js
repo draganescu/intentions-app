@@ -1,4 +1,4 @@
-const CACHE_NAME = 'natural-chat-v1';
+const CACHE_NAME = 'intentions-v1';
 const ASSETS = [
     '/',
     '/index.html',

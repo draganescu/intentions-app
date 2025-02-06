@@ -1,4 +1,4 @@
-const DB_NAME = 'chatDB';
+const DB_NAME = 'intentionsDB';
 const DB_VERSION = 3;
 const STORE_NAME = 'messages';
 const TAG_STORE = 'tags';
@@ -320,4 +320,41 @@ export async function deleteFilter(id) {
     });
 }
 
-export { PAGE_SIZE }; 
+// Delete a message and its associated tags
+export async function deleteMessage(timestamp) {
+    const database = await openDB();
+    const tx = database.transaction([STORE_NAME, MESSAGE_TAGS_STORE], 'readwrite');
+    const messageStore = tx.objectStore(STORE_NAME);
+    const messageTagsStore = tx.objectStore(MESSAGE_TAGS_STORE);
+
+    try {
+        // Delete message-tag relationships first
+        await new Promise((resolve, reject) => {
+            const index = messageTagsStore.index('messageTimestamp');
+            const request = index.openCursor(IDBKeyRange.only(timestamp));
+            
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                } else {
+                    resolve();
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+
+        // Then delete the message
+        await new Promise((resolve, reject) => {
+            const request = messageStore.delete(timestamp);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        tx.abort();
+        throw error;
+    }
+}
+
+export { PAGE_SIZE };

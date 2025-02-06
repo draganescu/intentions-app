@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Natural Chat</title>
+    <title>Intentions</title>
     <meta name="theme-color" content="#2C3639">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
@@ -14,7 +14,7 @@
 <body>
     <div class="app">
         <header class="app-header">
-            <h1>Natural Chat</h1>
+            <h1>Intentions</h1>
             <sl-icon-button name="list" label="Toggle Tags" id="toggleTags"></sl-icon-button>
         </header>
         
@@ -52,7 +52,7 @@
         </footer>
     </div>
 
-    <sl-dialog class="help-modal" label="How to Use Natural Chat" hidden>
+    <sl-dialog class="help-modal" label="How to Use Intentions" hidden>
         <div class="help-section">
             <h3>Basic Usage</h3>
             <p>Type your message and press Enter to send. Use Shift+Enter for new lines.</p>
@@ -90,6 +90,13 @@
             <ul>
                 <li><code>@help</code> - Show this help dialog</li>
             </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Settings</h3>
+            <div class="settings-group">
+                <sl-switch id="splitPasteToggle" size="small">Split pasted text into multiple messages</sl-switch>
+            </div>
         </div>
     </sl-dialog>
 

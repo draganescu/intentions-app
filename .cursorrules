@@ -1,4 +1,10 @@
 
+# General
+
+Always use the correct HTML tags and attributes.
+Always indent with tabs. Tab length is 4.
+
+
 # Client side
 
 - This is a vanilla HTML/JS/CSS project.
