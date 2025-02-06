@@ -1,0 +1,15 @@
+
+# Client side
+
+- This is a vanilla HTML/JS/CSS project.
+- No build step is to be introduced.
+- To build UI, we'll use web components and Shoelace (https://shoelace.style) for the UI design system.
+- Load all global assets from public CDN (jsdelivr.net or alternatives).
+
+# Server side
+
+- This is a PHP 8 project.
+- Use Composer for dependency management.
+- Use no framework.
+- Use MySQL for the database.
+- Use no ORM.

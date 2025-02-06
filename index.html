@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Natural Chat</title>
+    <meta name="theme-color" content="#2C3639">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/themes/light.css">
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/shoelace-autoloader.js"></script>
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+            <h1>Natural Chat</h1>
+            <sl-icon-button name="list" label="Toggle Tags" id="toggleTags"></sl-icon-button>
+        </header>
+        
+        <div class="app-container">
+            <aside class="tag-sidebar">
+                <div class="tag-header">
+                    <h2>Tags</h2>
+                    <sl-icon-button name="x-lg" label="Close" id="closeTags"></sl-icon-button>
+                </div>
+                <div class="tag-list" id="tagList">
+                    <!-- Tags will be inserted here -->
+                </div>
+            </aside>
+
+            <main class="chat-container">
+                <div class="messages" id="messages">
+                    <!-- Messages will be inserted here -->
+                </div>
+            </main>
+        </div>
+
+        <footer class="input-area">
+            <form id="messageForm" class="message-form">
+                <sl-textarea
+                    name="message"
+                    placeholder="Type a message..."
+                    resize="auto"
+                    rows="1"
+                    class="message-input"
+                ></sl-textarea>
+                <sl-button type="submit" variant="primary" size="large" circle>
+                    <sl-icon name="arrow-right" label="Send"></sl-icon>
+                </sl-button>
+            </form>
+        </footer>
+    </div>
+
+    <sl-dialog class="help-modal" label="How to Use Natural Chat" hidden>
+        <div class="help-section">
+            <h3>Basic Usage</h3>
+            <p>Type your message and press Enter to send. Use Shift+Enter for new lines.</p>
+        </div>
+
+        <div class="help-section">
+            <h3>Tags</h3>
+            <ul>
+                <li>Add tags to messages using hashtags: <code>#important</code>, <code>#todo</code></li>
+                <li>Click on tags in messages to filter by that tag</li>
+                <li>Use the sidebar to view and filter by available tags</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Search</h3>
+            <ul>
+                <li>Start with <code>/</code> to search messages: <code>/meeting notes</code></li>
+                <li>Search looks for messages containing all words</li>
+                <li>Press Enter to save the search for quick access</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Tag Filters</h3>
+            <ul>
+                <li>Start with <code>#</code> to create tag filters: <code>#important #todo</code></li>
+                <li>Press Enter to save the tag combination for quick access</li>
+                <li>Access saved filters in the sidebar</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Commands</h3>
+            <ul>
+                <li><code>@help</code> - Show this help dialog</li>
+            </ul>
+        </div>
+    </sl-dialog>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html> 
