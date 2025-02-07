@@ -475,7 +475,10 @@ textarea.addEventListener('input', (e) => {
     const parts = text.split(/\s+/);
     
     // First, identify the database operation (first # or / encountered)
-    const dbOpIndex = parts.findIndex(part => part.startsWith('#') || part.startsWith('/'));
+    const dbOpIndex = parts.findIndex(part => 
+        (part.startsWith('#') && part.length > 1) || 
+        (part.startsWith('/') && part.length > 1)
+    );
     if (dbOpIndex !== -1) {
         operations.push({
             type: parts[dbOpIndex].startsWith('#') ? 'tag' : 'search',
@@ -486,13 +489,13 @@ textarea.addEventListener('input', (e) => {
         // Add remaining # and / operations as list filters
         parts.forEach((part, index) => {
             if (index !== dbOpIndex) {
-                if (part.startsWith('#')) {
+                if (part.startsWith('#') && part.length > 1) {
                     operations.push({
                         type: 'tag',
                         value: [part],
                         isDatabase: false
                     });
-                } else if (part.startsWith('/')) {
+                } else if (part.startsWith('/') && part.length > 1) {
                     operations.push({
                         type: 'search',
                         value: part.slice(1),
