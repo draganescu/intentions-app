@@ -73,6 +73,7 @@
                 <li>Start with <code>/</code> to search messages: <code>/meeting notes</code></li>
                 <li>Search looks for messages containing all words</li>
                 <li>Press Enter to save the search for quick access</li>
+                <li>Combine with tags and numbers: <code>/meeting #work :1</code></li>
             </ul>
         </div>
 
@@ -82,6 +83,16 @@
                 <li>Start with <code>#</code> to create tag filters: <code>#important #todo</code></li>
                 <li>Press Enter to save the tag combination for quick access</li>
                 <li>Access saved filters in the sidebar</li>
+                <li>Combine with search and numbers: <code>#work /email :2</code></li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Message Selection</h3>
+            <ul>
+                <li>Use <code>:n</code> to select the nth message: <code>:3</code></li>
+                <li>Can be combined with search and tags: <code>#todo /urgent :1</code></li>
+                <li>Operations are applied in order: <code>#work /email :3</code> filters by work tag, then searches for email, then selects the 3rd result</li>
             </ul>
         </div>
 

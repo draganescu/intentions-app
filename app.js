@@ -248,8 +248,8 @@ async function addMessage(text, type, skipStorage = false) {
     
     // Add elements to message
     message.appendChild(numberPill);
-    message.appendChild(actionMenu);
     message.appendChild(contentContainer);
+    message.appendChild(actionMenu);
     
     // Store the message timestamp for deletion
     let messageTimestamp;
@@ -269,67 +269,25 @@ async function addMessage(text, type, skipStorage = false) {
     // Store the timestamp in a data attribute
     message.dataset.timestamp = messageTimestamp;
     
-    // Add long press handling
-    let pressTimer = null;
-    const longPressDelay = 500; // 500ms for long press
-    let isLongPress = false;
-    
-    const startPress = (e) => {
-        if (e.type === 'mousedown' && e.button !== 0) return; // Only handle left mouse button
-        isLongPress = false;
-        pressTimer = setTimeout(() => {
-            isLongPress = true;
-            // Find message number
-            const messages = Array.from(messagesContainer.querySelectorAll('.message'));
-            const messageIndex = messages.indexOf(message);
-            const messageNumber = messages.length - messageIndex;
-            
-            // Update textarea with colon command
-            textarea.value = `:${messageNumber}`;
-            
-            // Trigger input event to show numbers and highlight
-            const inputEvent = new Event('input');
-            textarea.dispatchEvent(inputEvent);
-            
-            // Show visual feedback
-            message.classList.add('highlighted');
-            
-            // Focus textarea
-            textarea.focus();
-        }, longPressDelay);
+    // Add click handler for message selection
+    message.addEventListener('click', (e) => {
+        // Don't trigger selection if clicking action menu buttons or tags
+        if (e.target.closest('sl-button') || e.target.closest('.tag')) return;
         
-        // Prevent text selection during long press
-        e.preventDefault();
-    };
-    
-    const endPress = (e) => {
-        clearTimeout(pressTimer);
-        // Prevent click event if this was a long press
-        if (isLongPress) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-    };
-    
-    const cancelPress = () => {
-        clearTimeout(pressTimer);
-    };
-    
-    // Add mouse event listeners
-    message.addEventListener('mousedown', startPress);
-    message.addEventListener('mouseup', endPress);
-    message.addEventListener('mouseleave', cancelPress);
-    
-    // Add touch event listeners
-    message.addEventListener('touchstart', startPress, { passive: false });
-    message.addEventListener('touchend', endPress);
-    message.addEventListener('touchcancel', cancelPress);
+        // Deselect any other selected messages
+        document.querySelectorAll('.message.selected').forEach(msg => {
+            if (msg !== message) msg.classList.remove('selected');
+        });
+        
+        // Toggle selection on this message
+        message.classList.toggle('selected');
+    });
     
     // Add click handlers for action menu buttons
     const [doneBtn, detailsBtn, deleteBtn] = actionMenu.querySelectorAll('sl-button');
     
     doneBtn.addEventListener('click', () => {
-        message.classList.remove('highlighted');
+        message.classList.remove('selected');
         // Add your done action here
     });
     
@@ -397,14 +355,10 @@ async function addMessage(text, type, skipStorage = false) {
     // Add click handlers for tags
     contentContainer.querySelectorAll('.tag').forEach(tagElement => {
         tagElement.addEventListener('click', (e) => {
-            // Don't trigger tag click if this was a long press
-            if (isLongPress) {
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-            }
+            e.preventDefault();
+            e.stopPropagation();
             const tag = tagElement.dataset.tag;
-            if (!activeTagFilter.includes(tag)) {
+            if (! activeTagFilter.includes(tag) ) {
                 activeTagFilter.push(tag);
                 loadMessages();
                 updateTagList();
@@ -458,58 +412,6 @@ function resetPasteState() {
     textarea.classList.remove('pasted');
 }
 
-// Handle textarea keyboard events
-textarea.addEventListener('keydown', async (e) => {
-    // Send message on Enter (but not with Shift key)
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        const message = textarea.value.trim();
-        if (message) {
-            if (splitPasteEnabled && wasPasted && (message.includes('\n') || message.includes('\r'))) {
-                // Split pasted text into multiple messages, limit to 200
-                const messages = message.split(/\r?\n/)
-                    .filter(msg => msg.trim())
-                    .slice(0, 200);
-                
-                if (messages.length > 200) {
-                    // Show notification about limit
-                    const notification = document.createElement('div');
-                    notification.className = 'message-info';
-                    notification.textContent = 'Message limit reached (200 messages maximum)';
-                    messagesContainer.appendChild(notification);
-                }
-                
-                // Process all messages first
-                for (const msg of messages) {
-                    await addMessage(msg.trim(), 'sent');
-                }
-                
-                // Then refresh the view once at the end
-                await loadMessages();
-                await updateTagList();
-                
-                textarea.value = '';
-            } else {
-                await addMessage(message, 'sent');
-                await loadMessages();
-                await updateTagList();
-                textarea.value = '';
-            }
-            
-            resetPasteState();
-            
-            // Auto resize textarea
-            const event = new Event('sl-input');
-            textarea.dispatchEvent(event);
-            
-            // Maintain focus
-            requestAnimationFrame(() => {
-                textarea.focus();
-            });
-        }
-    }
-});
-
 // Debounced search function
 async function performSearch(query) {
     if (isLoading) return;
@@ -537,6 +439,28 @@ async function performSearch(query) {
     }
 }
 
+// Client-side filtering functions
+function filterMessagesByTag(messages, tags) {
+    return messages.filter(message => {
+        const messageTags = extractTags(message.text);
+        return tags.every(tag => messageTags.includes(tag.toLowerCase()));
+    });
+}
+
+function filterMessagesBySearch(messages, searchTerms) {
+    const terms = searchTerms.toLowerCase().split(/\s+/);
+    return messages.filter(message => {
+        const messageText = message.text.toLowerCase();
+        return terms.every(term => messageText.includes(term));
+    });
+}
+
+function extractTags(text) {
+    const tagRegex = /#[\w-]+/g;
+    const matches = text.match(tagRegex) || [];
+    return [...new Set(matches.map(tag => tag.toLowerCase()))];
+}
+
 // Handle textarea input for search and commands
 textarea.addEventListener('input', (e) => {
     const text = e.target.value;
@@ -545,100 +469,141 @@ textarea.addEventListener('input', (e) => {
     if (searchTimeout) {
         clearTimeout(searchTimeout);
     }
+
+    // Parse input into ordered operations
+    const operations = [];
+    const parts = text.split(/\s+/);
     
-    if (text.startsWith(':')) {
-        const match = text.match(/^:(\d+)/);
-        if (match) {
-            const targetNumber = parseInt(match[1], 10);
-            // Remove highlight from all messages
-            messagesContainer.querySelectorAll('.message').forEach(msg => {
-                msg.classList.remove('highlighted');
-            });
-            // Find and highlight the message with matching number
+    // First, identify the database operation (first # or / encountered)
+    const dbOpIndex = parts.findIndex(part => part.startsWith('#') || part.startsWith('/'));
+    if (dbOpIndex !== -1) {
+        operations.push({
+            type: parts[dbOpIndex].startsWith('#') ? 'tag' : 'search',
+            value: parts[dbOpIndex].startsWith('#') ? [parts[dbOpIndex]] : parts[dbOpIndex].slice(1),
+            isDatabase: true
+        });
+        
+        // Add remaining # and / operations as list filters
+        parts.forEach((part, index) => {
+            if (index !== dbOpIndex) {
+                if (part.startsWith('#')) {
+                    operations.push({
+                        type: 'tag',
+                        value: [part],
+                        isDatabase: false
+                    });
+                } else if (part.startsWith('/')) {
+                    operations.push({
+                        type: 'search',
+                        value: part.slice(1),
+                        isDatabase: false
+                    });
+                }
+            }
+        });
+    }
+    
+    // Handle colon operator separately
+    const hasColon = text.includes(':');
+    const numberMatch = text.match(/:(\d+)/);
+    
+    // Show numbers immediately when colon is typed and maintain them
+    if (hasColon) {
+        updateMessageNumbers(true);
+    } else {
+        updateMessageNumbers(false);
+    }
+    
+    // If we have operations, process them
+    if (operations.length > 0) {
+        searchTimeout = setTimeout(async () => {
+            let results;
+            
+            // First, execute database operation
+            const dbOp = operations.find(op => op.isDatabase);
+            if (dbOp.type === 'tag') {
+                results = await getMessagesWithTags(dbOp.value);
+            } else {
+                results = await searchMessages(dbOp.value);
+            }
+            
+            // Then apply list filters in sequence
+            const listOps = operations.filter(op => !op.isDatabase);
+            if (results && results.length > 0) {
+                for (const op of listOps) {
+                    if (op.type === 'tag') {
+                        results = filterMessagesByTag(results, op.value);
+                    } else {
+                        results = filterMessagesBySearch(results, op.value);
+                    }
+                }
+            }
+            
+            // Display results
+            clearMessages();
+            if (results && results.length > 0) {
+                results.forEach(msg => addMessage(msg.text, msg.type, true));
+                
+                // Ensure numbers stay visible if colon is present
+                if (hasColon) {
+                    updateMessageNumbers(true);
+                }
+                
+                // Apply number selection if present
+                if (numberMatch) {
+                    const targetNumber = parseInt(numberMatch[1], 10);
+                    const messages = Array.from(messagesContainer.querySelectorAll('.message'));
+                    messages.forEach((message, index) => {
+                        const messageNumber = messages.length - index;
+                        if (messageNumber === targetNumber) {
+                            message.classList.add('highlighted');
+                            message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                            message.classList.remove('highlighted');
+                        }
+                    });
+                } else {
+                    // Just show numbers without highlighting when only colon is present
+                    messagesContainer.querySelectorAll('.message').forEach(msg => {
+                        msg.classList.remove('highlighted');
+                    });
+                }
+            } else {
+                const noResults = document.createElement('div');
+                noResults.className = 'message-info';
+                noResults.textContent = 'No messages found';
+                messagesContainer.appendChild(noResults);
+            }
+        }, 300);
+    } else if (hasColon) {
+        // Only colon operation
+        if (numberMatch) {
+            const targetNumber = parseInt(numberMatch[1], 10);
             const messages = Array.from(messagesContainer.querySelectorAll('.message'));
             messages.forEach((message, index) => {
                 const messageNumber = messages.length - index;
                 if (messageNumber === targetNumber) {
                     message.classList.add('highlighted');
                     message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    message.classList.remove('highlighted');
                 }
             });
         } else {
-            // Show numbers without highlighting if no specific number
-            updateMessageNumbers(true);
+            // Just show numbers without highlighting
+            messagesContainer.querySelectorAll('.message').forEach(msg => {
+                msg.classList.remove('highlighted');
+            });
         }
     } else {
-        // Remove all highlights and numbers when not using colon
-        messagesContainer.querySelectorAll('.message').forEach(msg => {
-            msg.classList.remove('highlighted');
-        });
-        updateMessageNumbers(false);
-    }
-    
-    // Toggle message numbers when text starts with colon
-    updateMessageNumbers(text.startsWith(':'));
-    
-    if (text.startsWith('@')) {
-        const command = text.trim();
-        
-        if (command === '@help') {
-            helpModal.show();
-            textarea.value = '';
-            // Auto resize textarea after clearing
-            const event = new Event('sl-input');
-            textarea.dispatchEvent(event);
-            return;
-        }
-    }
-    
-    if (text.startsWith('/')) {
-        isSearchMode = true;
-        // Clear any active tag filters when entering search mode
-        activeTagFilter = [];
-        const query = text.slice(1).trim();
-        
-        if (query) {
-            // Debounce search with 300ms delay
-            searchTimeout = setTimeout(() => {
-                performSearch(query);
-                // Update tag sidebar to show all tags as inactive
-                const tagItems = tagList.querySelectorAll('.tag-item');
-                tagItems.forEach(item => item.classList.remove('active'));
-            }, 300);
-        } else {
-            // If search is empty, show normal messages
-            loadMessages();
-        }
-    } else if (text.startsWith('#')) {
-        isSearchMode = true;
-        const tags = text.trim()
-            .split(/\s+/)
-            .filter(word => word.startsWith('#'))
-            .map(tag => tag.toLowerCase());
-            
-        if (tags.length > 0) {
-            // Debounce tag filtering with 300ms delay
-            searchTimeout = setTimeout(() => {
-                activeTagFilter = tags;
-                loadMessages();
-                updateTagList();
-            }, 300);
-        } else {
-            // Clear all tag filters and update UI
-            activeTagFilter = [];
-            loadMessages();
-            // Update tag sidebar to show all tags as inactive
-            const tagItems = tagList.querySelectorAll('.tag-item');
-            tagItems.forEach(item => item.classList.remove('active'));
-        }
-    } else if (isSearchMode) {
-        // If we were in search mode but no longer are, reset to normal view
+        // No operations, reset to normal view
         isSearchMode = false;
         activeTagFilter = [];
         loadMessages();
-        // Update tag sidebar to show all tags as inactive
-        const tagItems = tagList.querySelectorAll('.tag-item');
-        tagItems.forEach(item => item.classList.remove('active'));
+        updateMessageNumbers(false);
+        messagesContainer.querySelectorAll('.message').forEach(msg => {
+            msg.classList.remove('highlighted');
+        });
     }
 });
 
@@ -669,14 +634,15 @@ function updateMessageNumbers(show = false) {
 
 // Update message form submission
 messageForm.addEventListener('submit', async (e) => {
+    alert('submit');
     e.preventDefault();
     const message = textarea.value.trim();
     
     if (message) {
         // Remove the colon prefix if present
         const actualMessage = message.startsWith(':') ? message.slice(1).trim() : message;
-        
         if (actualMessage.startsWith('@')) {
+            
             if (actualMessage === '@help') {
                 helpModal.show();
             }
