@@ -15,20 +15,13 @@
     <div class="app">
         <header class="app-header">
             <h1>Intentions</h1>
-            <sl-icon-button name="list" label="Toggle Tags" id="toggleTags"></sl-icon-button>
+            <sl-button size="small" variant="ghost" id="toggleTags">
+                <sl-icon name="list" class="mobile-only"></sl-icon>
+                <span class="desktop-only">Tags</span>
+            </sl-button>
         </header>
-        
-        <div class="app-container">
-            <aside class="tag-sidebar">
-                <div class="tag-header">
-                    <h2>Tags</h2>
-                    <sl-icon-button name="x-lg" label="Close" id="closeTags"></sl-icon-button>
-                </div>
-                <div class="tag-list" id="tagList">
-                    <!-- Tags will be inserted here -->
-                </div>
-            </aside>
 
+        <div class="app-container">
             <main class="chat-container">
                 <div class="messages" id="messages">
                     <!-- Messages will be inserted here -->
@@ -36,20 +29,25 @@
             </main>
         </div>
 
-        <footer class="input-area">
+        <div class="sidebar-backdrop"></div>
+        <aside class="tag-sidebar">
+            <div class="tag-header">
+                <h2>Tags</h2>
+                <sl-icon-button name="x-lg" label="Close" id="closeTags"></sl-icon-button>
+            </div>
+            <div class="tag-list" id="tagList">
+                <!-- Tags will be inserted here -->
+            </div>
+        </aside>
+
+        <div class="input-area">
             <form id="messageForm" class="message-form">
-                <sl-textarea
-                    name="message"
-                    placeholder="Type a message..."
-                    resize="auto"
-                    rows="1"
-                    class="message-input"
-                ></sl-textarea>
-                <sl-button type="submit" variant="primary" size="large" circle>
-                    <sl-icon name="arrow-right" label="Send"></sl-icon>
+                <sl-textarea name="message" placeholder="Type a message..." rows="1" resize="auto" class="message-input"></sl-textarea>
+                <sl-button type="submit" variant="primary" circle>
+                    <sl-icon name="arrow-up" label="Send"></sl-icon>
                 </sl-button>
             </form>
-        </footer>
+        </div>
     </div>
 
     <sl-dialog class="help-modal" label="How to Use Intentions" hidden>
@@ -113,4 +111,4 @@
 
     <script src="app.js" type="module"></script>
 </body>
-</html> 
+</html>
