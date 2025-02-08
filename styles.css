@@ -90,11 +90,11 @@ body {
     padding-bottom: 2rem;
     position: relative;
     width: calc(100% - 2rem);
-	margin: 1rem;
+    margin: 1rem;
 }
 
 .messages.show-numbers {
-	width: calc(100% - 3rem);
+    width: calc(100% - 3rem);
 }
 
 .message {
@@ -264,21 +264,26 @@ body {
 }
 
 .load-more-btn {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-secondary);
-    color: var(--color-text);
-    padding: 0.5rem 1rem;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.875rem;
-    margin: 0.5rem auto;
-    display: block;
-    transition: background-color 0.2s;
+    align-self: center;
+    margin-bottom: 1rem;
+    --sl-spacing-x-small: 0.5rem;
 }
 
-.load-more-btn:hover {
-    background-color: var(--color-background);
+.load-more-btn::part(base) {
+    color: var(--color-secondary);
+    font-size: 0.875rem;
+}
+
+.load-more-btn::part(base):hover {
+    color: var(--color-primary);
+}
+
+.load-more-btn::part(prefix) {
+    font-size: 1.25rem;
+}
+
+.load-more-btn.hidden {
+    display: none;
 }
 
 .app-container {
@@ -303,10 +308,14 @@ body {
     z-index: 200;
     padding-top: max(1rem, env(safe-area-inset-top));
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .tag-sidebar.open {
     transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
 }
 
 .tag-header {

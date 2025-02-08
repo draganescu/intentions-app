@@ -7,7 +7,7 @@ if ('serviceWorker' in navigator) {
 	});
 }
 
-import { saveMessage, getMessages, getMessagesWithTags, getAllTags, searchMessages, saveFilter, getAllFilters, deleteFilter, deleteMessage } from './db.js';
+import { saveMessage, getMessages, getMessagesWithTags, getAllTags, searchMessages, saveFilter, getAllFilters, deleteFilter, deleteMessage, PAGE_SIZE } from './db.js';
 
 // Visual viewport handling for iOS
 const viewport = window.visualViewport;
@@ -34,6 +34,7 @@ const messageForm = document.getElementById('messageForm');
 const messagesContainer = document.getElementById('messages');
 const textarea = messageForm.querySelector('sl-textarea');
 const helpModal = document.querySelector('.help-modal');
+const loadMoreBtn = document.getElementById('loadMoreBtn');
 let isLoading = false;
 let currentPage = 0;
 let activeTagFilter = [];
@@ -42,6 +43,8 @@ let isSearchMode = false;
 let wasPasted = false;
 let splitPasteEnabled = localStorage.getItem('splitPasteEnabled') !== 'false'; // Default to true
 let showMessageNumbers = false;
+// Add state tracking variables
+let previousState = null;
 
 // Tag sidebar functionality
 const tagSidebar = document.querySelector('.tag-sidebar');
@@ -122,7 +125,7 @@ async function updateTagList() {
 				<span>${tag.slice(1)}</span>
 			`;
 
-			tagItem.addEventListener('click', () => {
+			tagItem.addEventListener('click', async () => {
 				// Remove active class from all items (both tags and filters)
 				tagList.querySelectorAll('.tag-item, .filter-item').forEach(item => {
 					item.classList.remove('active');
@@ -131,12 +134,20 @@ async function updateTagList() {
 				if (activeTagFilter.length === 1 && activeTagFilter[0] === tag) {
 					// Deactivate if clicking the active tag
 					activeTagFilter = [];
+					// Reset to page 0 and load all pages
+					currentPage = 0;
+					do {
+						await loadMessages(currentPage > 0);
+						if (loadMoreBtn.classList.contains('hidden')) break;
+						currentPage++;
+					} while (true);
 				} else {
 					// Activate only this tag
 					activeTagFilter = [tag];
 					tagItem.classList.add('active');
+					currentPage = 0;
+					loadMessages();
 				}
-				loadMessages();
 			});
 
 			tagsSection.appendChild(tagItem);
@@ -228,26 +239,54 @@ async function updateTagList() {
 	}
 }
 
+// Load more button click handler
+loadMoreBtn.addEventListener('click', async () => {
+	if (!isLoading) {
+		currentPage++;
+		await loadMessages(true);
+	}
+});
+
 // Load messages
-async function loadMessages() {
+async function loadMessages(append = false) {
 	if (isLoading) return;
 	isLoading = true;
 
+	loadMoreBtn.loading = true;
+
 	try {
 		const messages = activeTagFilter.length > 0
-			? await getMessagesWithTags(activeTagFilter, 0)
-			: await getMessages(0);
+			? await getMessagesWithTags(activeTagFilter, currentPage)
+			: await getMessages(currentPage);
 
-		clearMessages();
+		if (!append) {
+			clearMessages();
+		}
 
-		// Add messages in chronological order (oldest first)
-		messages.reverse().forEach(msg => {
-			addMessage(msg, msg.type, true);
-		});
+		// Add messages in order (newest at bottom)
+		for (const msg of messages) {
+			// Always insert after the load more button
+			const loadMoreBtn = messagesContainer.querySelector('.load-more-btn');
+			const messageElement = await addMessage(msg, msg.type, true);
+			if (loadMoreBtn && messageElement) {
+				messagesContainer.insertBefore(messageElement, loadMoreBtn.nextSibling);
+			}
+		}
+
+		// Show/hide load more button based on whether there are more messages
+		loadMoreBtn.classList.toggle('hidden', messages.length < PAGE_SIZE);
+
+		// Scroll to bottom on first page load
+		if (currentPage === 0) {
+			scrollToBottom();
+		}
+
 	} catch (error) {
 		console.error('Failed to load messages:', error);
+		currentPage = Math.max(0, currentPage - 1); // Revert page increment if failed
 	} finally {
 		isLoading = false;
+		loadMoreBtn.loading = false;
 	}
 }
 
@@ -404,14 +443,11 @@ async function addMessage(text, type, skipStorage = false) {
 	});
 
 	if (!skipStorage) {
-		// New messages always go at the bottom
-		messagesContainer.appendChild(message);
-		scrollToBottom();
-	} else {
-		// For loaded messages, append at the bottom instead of inserting at top
-		messagesContainer.appendChild(message);
 		scrollToBottom();
 	}
+
+	messagesContainer.appendChild(message);
+	return message;
 }
 
 // Scroll to bottom of messages
@@ -432,8 +468,12 @@ function scrollToBottom() {
 
 // Clear messages container
 function clearMessages() {
-	while (messagesContainer.firstChild) {
-		messagesContainer.removeChild(messagesContainer.firstChild);
+	// Save the load more button
+	const loadMoreBtn = messagesContainer.querySelector('.load-more-btn');
+	messagesContainer.innerHTML = '';
+	// Restore the load more button
+	if (loadMoreBtn) {
+		messagesContainer.appendChild(loadMoreBtn);
 	}
 }
 
@@ -498,6 +538,36 @@ function extractTags(text) {
 	return [...new Set(matches.map(tag => tag.toLowerCase()))];
 }
 
+// Function to save current state
+function saveCurrentState() {
+	previousState = {
+		currentPage,
+		messages: Array.from(messagesContainer.querySelectorAll('.message')).map(msg => ({
+			text: msg.querySelector('.message-content').textContent,
+			type: msg.classList.contains('sent') ? 'sent' : 'received'
+		})),
+		hasMorePages: !loadMoreBtn.classList.contains('hidden')
+	};
+}
+
+// Function to restore previous state
+async function restorePreviousState() {
+	if (!previousState) return;
+
+	currentPage = previousState.currentPage;
+	clearMessages();
+
+	// Restore messages
+	for (const msg of previousState.messages) {
+		await addMessage(msg, msg.type, true);
+	}
+
+	// Show/hide load more button based on previous state
+	loadMoreBtn.classList.toggle('hidden', !previousState.hasMorePages);
+
+	previousState = null;
+}
+
 // Handle textarea input for search and commands
 textarea.addEventListener('input', (e) => {
 	const text = e.target.value;
@@ -507,11 +577,19 @@ textarea.addEventListener('input', (e) => {
 		clearTimeout(searchTimeout);
 	}
 
+	// Save state before first operation
+	if ((text.startsWith('#') || text.startsWith('/')) && !previousState) {
+		saveCurrentState();
+	}
+
 	// Remove active state from filters if input is cleared or doesn't match any active filter
 	if (!text.trim()) {
 		tagList.querySelectorAll('.tag-item.active, .filter-item.active').forEach(item => {
 			item.classList.remove('active');
 		});
+		// Restore previous state when input is cleared
+		restorePreviousState();
+		return;
 	}
 
 	// Parse input into ordered operations
@@ -519,8 +597,8 @@ textarea.addEventListener('input', (e) => {
 	const parts = text.split(/\s+/);
 
 	// First, identify the database operation (first # or / encountered)
-	const maybeChain = (
-		text.startsWith('#') ||
+	const maybeChain =
+		( text.startsWith('#') ||
 		text.startsWith('/') ) &&
 		parts[0].length > 1;
 
@@ -644,10 +722,9 @@ textarea.addEventListener('input', (e) => {
 			});
 		}
 	} else {
-		// No operations, reset to normal view
+		// No operations, only reset search/filter state without reloading messages
 		isSearchMode = false;
 		activeTagFilter = [];
-		loadMessages();
 		updateMessageNumbers(false);
 		messagesContainer.querySelectorAll('.message').forEach(msg => {
 			msg.classList.remove('highlighted');
@@ -748,18 +825,17 @@ async function handleMessages () {
 				messagesContainer.appendChild(notification);
 			}
 
-			// Process all messages first
+			// Process all messages
 			for (const msg of messages) {
 				await addMessage(msg.trim(), 'sent');
 			}
 
-			// Then refresh the view once at the end
-			await loadMessages();
+			// Update tag list without reloading messages
 			await updateTagList();
 
 		} else {
 			await addMessage(actualMessage, 'sent');
-			await loadMessages();
+			// Update tag list without reloading messages
 			await updateTagList();
 		}
 
@@ -798,8 +874,11 @@ document.head.appendChild(style);
 
 // Load messages when the app starts
 window.addEventListener('load', () => {
-	loadMessages();
-	updateTagList();
+	// Small delay to ensure components are defined
+	requestAnimationFrame(() => {
+		loadMessages();
+		updateTagList();
+	});
 });
 
 // Handle escape key globally

@@ -9,7 +9,11 @@
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/themes/light.css">
     <link rel="stylesheet" href="styles.css">
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/shoelace-autoloader.js"></script>
+    <script type="module">
+        // Import and define components before the app loads
+        import { setBasePath, SlButton, SlIcon, SlIconButton, SlTextarea, SlDialog } from 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/shoelace.js';
+        setBasePath('https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.12.0/cdn/');
+    </script>
 </head>
 <body>
     <div class="app">
@@ -24,6 +28,10 @@
         <div class="app-container">
             <main class="chat-container">
                 <div class="messages" id="messages">
+                    <sl-button size="small" variant="text" class="load-more-btn" id="loadMoreBtn">
+                        <sl-icon name="arrow-up-circle"></sl-icon>
+                        Load more
+                    </sl-button>
                     <!-- Messages will be inserted here -->
                 </div>
             </main>

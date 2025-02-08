@@ -4,7 +4,7 @@ const STORE_NAME = 'messages';
 const TAG_STORE = 'tags';
 const MESSAGE_TAGS_STORE = 'messageTags';
 const FILTERS_STORE = 'filters';
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 let db = null;
 
@@ -18,12 +18,12 @@ function extractTags(text) {
 // Open database connection
 async function openDB() {
     if (db) return db;
-    
+
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
         request.onerror = () => reject(request.error);
-        
+
         request.onsuccess = () => {
             db = request.result;
             resolve(db);
@@ -31,23 +31,23 @@ async function openDB() {
 
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
-            
+
             // Messages store
             if (!db.objectStoreNames.contains(STORE_NAME)) {
-                const store = db.createObjectStore(STORE_NAME, { 
+                const store = db.createObjectStore(STORE_NAME, {
                     keyPath: 'timestamp',
                     autoIncrement: false
                 });
                 store.createIndex('timestamp', 'timestamp');
             }
-            
+
             // Tags store
             if (!db.objectStoreNames.contains(TAG_STORE)) {
                 const tagStore = db.createObjectStore(TAG_STORE, {
                     keyPath: 'name'
                 });
             }
-            
+
             // Message-Tags relationship store
             if (!db.objectStoreNames.contains(MESSAGE_TAGS_STORE)) {
                 const messageTagsStore = db.createObjectStore(MESSAGE_TAGS_STORE, {
@@ -73,7 +73,7 @@ async function openDB() {
 export async function saveMessage(text, type) {
     const database = await openDB();
     const tx = database.transaction([STORE_NAME, TAG_STORE, MESSAGE_TAGS_STORE], 'readwrite');
-    
+
     const message = {
         text,
         type,
@@ -149,7 +149,7 @@ export async function getMessages(page = 0) {
         let count = 0;
 
         const cursorRequest = index.openCursor(null, 'prev');
-        
+
         cursorRequest.onsuccess = (event) => {
             const cursor = event.target.result;
             if (!cursor) {
@@ -184,7 +184,7 @@ export async function getLastPage() {
 }
 
 // Get messages with specific tags
-export async function getMessagesWithTags(tags = [], page = 0) {
+export async function getMessagesWithTags(tags = []) {
     const database = await openDB();
     const tx = database.transaction([STORE_NAME, MESSAGE_TAGS_STORE], 'readonly');
     const messageStore = tx.objectStore(STORE_NAME);
@@ -192,7 +192,7 @@ export async function getMessagesWithTags(tags = [], page = 0) {
     const tagIndex = messageTagsStore.index('tag');
 
     if (tags.length === 0) {
-        return getMessages(page);
+        return getMessages();
     }
 
     // Get message timestamps for each tag
@@ -200,7 +200,7 @@ export async function getMessagesWithTags(tags = [], page = 0) {
         return new Promise((resolve, reject) => {
             const timestamps = new Set();
             const cursorRequest = tagIndex.openCursor(IDBKeyRange.only(tag.toLowerCase()));
-            
+
             cursorRequest.onsuccess = (event) => {
                 const cursor = event.target.result;
                 if (cursor) {
@@ -222,8 +222,7 @@ export async function getMessagesWithTags(tags = [], page = 0) {
 
     // Sort timestamps in reverse order and apply pagination
     const paginatedTimestamps = commonTimestamps
-        .sort((a, b) => b - a)
-        .slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+        .sort((a, b) => b - a);
 
     // Get messages for the timestamps
     const messages = await Promise.all(paginatedTimestamps.map(timestamp => {
@@ -233,7 +232,6 @@ export async function getMessagesWithTags(tags = [], page = 0) {
             request.onerror = () => reject(request.error);
         });
     }));
-
     return messages;
 }
 
@@ -261,7 +259,7 @@ export async function searchMessages(query) {
         const messages = [];
         const cursorRequest = index.openCursor(null, 'prev');
         const searchTerms = query.toLowerCase().split(/\s+/);
-        
+
         cursorRequest.onsuccess = (event) => {
             const cursor = event.target.result;
             if (!cursor) {
@@ -332,7 +330,7 @@ export async function deleteMessage(timestamp) {
         await new Promise((resolve, reject) => {
             const index = messageTagsStore.index('messageTimestamp');
             const request = index.openCursor(IDBKeyRange.only(timestamp));
-            
+
             request.onsuccess = (event) => {
                 const cursor = event.target.result;
                 if (cursor) {
