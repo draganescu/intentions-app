@@ -88,8 +88,9 @@ export class SuperArea extends HTMLElement {
 			const currentFontSize = parseFloat(getComputedStyle(textarea).fontSize);
 			const targetHeight = availableHeight - (2 * lineHeight);
 			const ratio = availableRows / currentRows;
-			const newFontSize = Math.round(currentFontSize * ratio) + 'px';
-			// Convert to our level system (roughly)
+			const calculatedSize = Math.round(currentFontSize * ratio);
+			// Enforce minimum font size of 16px
+			const newFontSize = Math.max(calculatedSize, 16) + 'px';
 			this.scrollTriggered = true;
 			return newFontSize;
 		}
@@ -146,6 +147,29 @@ export class SuperArea extends HTMLElement {
 					this.style.setProperty('--current-font-size', newSize);
 				}
 			}
+		});
+
+		// Add paste handler
+		textarea.addEventListener('paste', (e) => {
+			// Use setTimeout to let the paste complete before calculating
+			setTimeout(() => {
+				const currentFontSize = parseFloat(getComputedStyle(textarea).fontSize);
+				if (currentFontSize < 16) {
+					return;
+				}
+				const newSize = this.calculateFontSize(e.target.value);
+				if (newSize !== this.currentSize) {
+					this.currentSize = newSize;
+					if (Number.isFinite(newSize)) {
+						const fontSize = this.getFontSizeForLevel(newSize);
+						e.target.style.fontSize = fontSize;
+						this.style.setProperty('--current-font-size', fontSize);
+					} else {
+						e.target.style.fontSize = newSize;
+						this.style.setProperty('--current-font-size', newSize);
+					}
+				}
+			}, 0);
 		});
 
 		const style = document.createElement('style');
